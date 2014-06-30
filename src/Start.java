@@ -4,7 +4,7 @@
 
 /**
  * @author joantomaspape
- *
+ * 
  */
 public class Start {
 
@@ -13,7 +13,13 @@ public class Start {
 	 */
 	public static void main(String[] args) {
 
-		// TODO Auto-generated method stub
+		ETL_Module etlModule = new ETL_Module();
+		etlModule.loadAllArticles();
+		etlModule.loadAllProductGroups();
+		etlModule.loadAllProductFamilies();
+		etlModule.loadAllProductCategories();
+
+		etlModule.readSales();
 
 	}
 
