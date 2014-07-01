@@ -14,10 +14,16 @@ public class Start {
 	public static void main(String[] args) {
 
 		ETL_Module etlModule = new ETL_Module();
-		etlModule.loadAllArticles();
-		etlModule.loadAllProductGroups();
-		etlModule.loadAllProductFamilies();
+
 		etlModule.loadAllProductCategories();
+		etlModule.loadAllProductFamilies();
+		etlModule.loadAllProductGroups();
+		etlModule.loadAllArticles();
+
+		etlModule.loadAllLands();
+		etlModule.loadAllRegions();
+		etlModule.loadAllCities();
+		etlModule.loadAllShops();
 
 		etlModule.readSales();
 

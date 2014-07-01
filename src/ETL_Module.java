@@ -1,11 +1,14 @@
 import java.io.BufferedReader;
-import java.io.FileReader;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.NumberFormat;
+import java.util.Locale;
 
 
 /**
@@ -45,18 +48,55 @@ public class ETL_Module {
 		BufferedReader reader = null;
 		try
 		{
-			reader = new BufferedReader(new FileReader("/DIS Aufgabe 7 - Datawarehouse/src/resources/sales.csv"));
+			String fileName = "src/resources/sales.csv";
+			reader = new BufferedReader(new InputStreamReader(new FileInputStream(fileName), "ISO-8859-1"));
 			String line = reader.readLine();
+			line = reader.readLine(); // Skipping the Name Line
+
 			String[] values;
+			String previousDate = "";
+			int previousYear = 0;
+			PreparedStatement dayStatement = outputConnection.prepareStatement("INSERT INTO DAY(day, month, year) VALUES (?, ?, ?)");
+			PreparedStatement yearStatement = outputConnection.prepareStatement("INSERT INTO YEAR(year) VALUES (?)");
+			PreparedStatement salesStatement = outputConnection.prepareStatement("INSERT INTO SALES(article, shop, day, amount, revenue) VALUES (?,?,?,?,?)");
 
 			while (line != null)
 			{
-				values = line.split("\\,");
-				System.out.println("Values: " + values[0] + " | " + values[1] + " | " + values[2] + " | " + values[3] + " | " + values[4]);
+				String currentOperation = "Added to Batch: ";
+				values = line.split("\\;");
+
+				int articleId = getIdForArticle(values[2]);
+				int shopId = getIdForShop(values[1]);
+
+				salesStatement.setInt(1, articleId);
+				currentOperation += " ArticleID = " + articleId + " |";
+
+				salesStatement.setInt(2, shopId);
+				currentOperation += " ShopID = " + shopId + " |";
+
+				salesStatement.setString(3, values[0]);
+				currentOperation += " Day = " + values[0] + " |";
+
+				salesStatement.setInt(4, Integer.parseInt(values[3]));
+				currentOperation += " amount = " + Integer.parseInt(values[3]) + " |";
+
+				NumberFormat format = NumberFormat.getInstance(Locale.GERMANY);
+
+				salesStatement.setDouble(5, format.parse(values[4]).doubleValue());
+				currentOperation += " revenue = " + format.parse(values[4]).doubleValue() + " |";
+
+				salesStatement.addBatch();
+				System.out.println(currentOperation);
+
+				// Adding the Dates on the fly..
+				previousYear = addDateToDB(values[0], previousDate, previousYear, dayStatement, yearStatement);
+				previousDate = values[0];
+
+				line = reader.readLine();
 
 			}
 
-		} catch (IOException e)
+		} catch (Exception e)
 		{
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -72,6 +112,60 @@ public class ETL_Module {
 				e.printStackTrace();
 			}
 		}
+	}
+
+
+	private int getIdForShop(String shopName) throws Exception {
+
+		ResultSet rs = outputConnection.createStatement().executeQuery("SELECT * FROM Shop WHERE name = '" + shopName + "'");
+		rs.next();
+		return rs.getInt("SHOPID");
+	}
+
+
+	private int getIdForArticle(String articleName) throws Exception {
+
+		ResultSet rs = outputConnection.createStatement().executeQuery("SELECT * FROM Article WHERE name = '" + articleName + "'");
+		rs.next();
+		return rs.getInt("ARTICLEID");
+	}
+
+
+	private int addDateToDB(String dateString, String previousDate, int previousYear, PreparedStatement dayStatement, PreparedStatement yearStatement) throws Exception {
+
+		if (!dateString.equalsIgnoreCase(previousDate))
+		{
+			String[] date = dateString.split("\\.");
+
+			if (previousYear < Integer.parseInt(date[2]))
+			{
+				String currentOperation = "Added to Batch: ";
+				yearStatement.setInt(1, Integer.parseInt(date[2]));
+				currentOperation += " Year = " + date[2];
+
+				yearStatement.addBatch();
+				System.out.println(currentOperation);
+			}
+
+			String currentOperation = "Added to Batch: ";
+
+			dayStatement.setString(1, dateString);
+			currentOperation += "date = " + dateString;
+
+			dayStatement.setInt(2, Integer.parseInt(date[1]));
+			currentOperation += " | month = " + Integer.parseInt(date[1]);
+
+			dayStatement.setInt(3, Integer.parseInt(date[2]));
+			currentOperation += " | year = " + Integer.parseInt(date[2]);
+
+			dayStatement.addBatch();
+			System.out.println(currentOperation);
+
+			return Integer.parseInt(date[2]);
+		}
+
+		return previousYear;
+
 	}
 
 
@@ -105,13 +199,24 @@ public class ETL_Module {
 				insertStatement.addBatch();
 
 				System.out.println(currentOperation);
-
 			}
+
+			insertStatement.executeBatch();
 
 		} catch (SQLException e)
 		{
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			while (e.getNextException() != null)
+			{
+				if (e.getErrorCode() == -803)
+				{
+					System.err.println("Entry is already in Database");
+				}
+				if (e.getErrorCode() != -803 && e.getErrorCode() != -99999)
+				{
+					e.printStackTrace();
+				}
+				e = e.getNextException();
+			}
 		}
 
 	}
@@ -148,10 +253,22 @@ public class ETL_Module {
 
 			}
 
+			insertStatement.executeBatch();
+
 		} catch (SQLException e)
 		{
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			while (e.getNextException() != null)
+			{
+				if (e.getErrorCode() == -803)
+				{
+					System.err.println("Entry is already in Database");
+				}
+				if (e.getErrorCode() != -803 && e.getErrorCode() != -99999)
+				{
+					e.printStackTrace();
+				}
+				e = e.getNextException();
+			}
 		}
 
 	}
@@ -187,10 +304,22 @@ public class ETL_Module {
 
 			}
 
+			insertStatement.executeBatch();
+
 		} catch (SQLException e)
 		{
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			while (e.getNextException() != null)
+			{
+				if (e.getErrorCode() == -803)
+				{
+					System.err.println("Entry is already in Database");
+				}
+				if (e.getErrorCode() != -803 && e.getErrorCode() != -99999)
+				{
+					e.printStackTrace();
+				}
+				e = e.getNextException();
+			}
 		}
 
 	}
@@ -223,10 +352,23 @@ public class ETL_Module {
 
 			}
 
+			insertStatement.executeBatch();
+
 		} catch (SQLException e)
 		{
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			while (e.getNextException() != null)
+			{
+				if (e.getErrorCode() == -803)
+				{
+					System.err.println("Entry is already in Database");
+				}
+				if (e.getErrorCode() != -803 && e.getErrorCode() != -99999)
+				{
+					e.printStackTrace();
+				}
+				e = e.getNextException();
+			}
+
 		}
 
 	}
@@ -241,7 +383,7 @@ public class ETL_Module {
 			PreparedStatement pstmt = inputConnection.prepareStatement(selectSQL);
 			ResultSet rs = pstmt.executeQuery();
 
-			PreparedStatement insertStatement = outputConnection.prepareStatement("INSERT INTO Shop(SHOPID, NAME,CITYID) VALUES (?,?,?)");
+			PreparedStatement insertStatement = outputConnection.prepareStatement("INSERT INTO Shop(SHOPID, NAME, CITY) VALUES (?,?,?)");
 
 			while (rs.next())
 			{
@@ -253,8 +395,8 @@ public class ETL_Module {
 				insertStatement.setString(2, rs.getString("NAME"));
 				currentOperation += " Name = '" + rs.getString("NAME") + "' -";
 
-				insertStatement.setInt(3, rs.getInt("CITYID"));
-				currentOperation += " PrGroupID = '" + rs.getInt("CITYID") + "'";
+				insertStatement.setInt(3, rs.getInt("STADTID"));
+				currentOperation += " PrGroupID = '" + rs.getInt("STADTID") + "'";
 
 				insertStatement.addBatch();
 
@@ -262,10 +404,22 @@ public class ETL_Module {
 
 			}
 
+			insertStatement.executeBatch();
+
 		} catch (SQLException e)
 		{
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			while (e.getNextException() != null)
+			{
+				if (e.getErrorCode() == -803)
+				{
+					System.err.println("Entry is already in Database");
+				}
+				if (e.getErrorCode() != -803 && e.getErrorCode() != -99999)
+				{
+					e.printStackTrace();
+				}
+				e = e.getNextException();
+			}
 		}
 
 	}
@@ -277,18 +431,18 @@ public class ETL_Module {
 
 		try
 		{
-			String selectSQL = "SELECT * FROM CITYID";
+			String selectSQL = "SELECT * FROM STADTID";
 			PreparedStatement pstmt = inputConnection.prepareStatement(selectSQL);
 			ResultSet rs = pstmt.executeQuery();
 
-			PreparedStatement insertStatement = outputConnection.prepareStatement("INSERT INTO City(CITYID, NAME,REGIONID) VALUES (?,?,?)");
+			PreparedStatement insertStatement = outputConnection.prepareStatement("INSERT INTO City(CITYID, NAME, REGION) VALUES (?,?,?)");
 
 			while (rs.next())
 			{
 				String currentOperation = "Added to Batch: ";
 
-				insertStatement.setInt(1, rs.getInt("CITYID"));
-				currentOperation += " CityId = '" + rs.getInt("CITYID") + "' -";
+				insertStatement.setInt(1, rs.getInt("STADTID"));
+				currentOperation += " CityId = '" + rs.getInt("STADTID") + "' -";
 
 				insertStatement.setString(2, rs.getString("NAME"));
 				currentOperation += " Name = '" + rs.getString("NAME") + "' -";
@@ -302,10 +456,22 @@ public class ETL_Module {
 
 			}
 
+			insertStatement.executeBatch();
+
 		} catch (SQLException e)
 		{
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			while (e.getNextException() != null)
+			{
+				if (e.getErrorCode() == -803)
+				{
+					System.err.println("Entry is already in Database");
+				}
+				if (e.getErrorCode() != -803 && e.getErrorCode() != -99999)
+				{
+					e.printStackTrace();
+				}
+				e = e.getNextException();
+			}
 		}
 
 	}
@@ -320,7 +486,7 @@ public class ETL_Module {
 			PreparedStatement pstmt = inputConnection.prepareStatement(selectSQL);
 			ResultSet rs = pstmt.executeQuery();
 
-			PreparedStatement insertStatement = outputConnection.prepareStatement("INSERT INTO Region(RegionID, NAME,LANDID) VALUES (?,?,?)");
+			PreparedStatement insertStatement = outputConnection.prepareStatement("INSERT INTO Region(REGIONID, NAME,LAND) VALUES (?,?,?)");
 
 			while (rs.next())
 			{
@@ -333,7 +499,7 @@ public class ETL_Module {
 				currentOperation += " Name = '" + rs.getString("NAME") + "' -";
 
 				insertStatement.setInt(3, rs.getInt("LANDID"));
-				currentOperation += " LandID = '" + rs.getInt("LANDID") + "'";
+				currentOperation += " Land = '" + rs.getInt("LANDID") + "'";
 
 				insertStatement.addBatch();
 
@@ -341,10 +507,22 @@ public class ETL_Module {
 
 			}
 
+			insertStatement.executeBatch();
+
 		} catch (SQLException e)
 		{
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			while (e.getNextException() != null)
+			{
+				if (e.getErrorCode() == -803)
+				{
+					System.err.println("Entry is already in Database");
+				}
+				if (e.getErrorCode() != -803 && e.getErrorCode() != -99999)
+				{
+					e.printStackTrace();
+				}
+				e = e.getNextException();
+			}
 		}
 
 	}
@@ -355,11 +533,11 @@ public class ETL_Module {
 		System.out.println("\nLoading Lands..");
 		try
 		{
-			String selectSQL = "SELECT * FROM PRODUCTCATEGORYID";
+			String selectSQL = "SELECT * FROM LANDID";
 			PreparedStatement pstmt = inputConnection.prepareStatement(selectSQL);
 			ResultSet rs = pstmt.executeQuery();
 
-			PreparedStatement insertStatement = outputConnection.prepareStatement("INSERT INTO LAND(LANDID, NAME) VALUES (?)");
+			PreparedStatement insertStatement = outputConnection.prepareStatement("INSERT INTO LAND(LANDID, NAME) VALUES (?, ?)");
 
 			while (rs.next())
 			{
@@ -368,7 +546,7 @@ public class ETL_Module {
 				insertStatement.setString(1, rs.getString("LANDID"));
 				currentOperation += " LandID = '" + rs.getString("LANDID") + "'";
 
-				insertStatement.setString(1, rs.getString("NAME"));
+				insertStatement.setString(2, rs.getString("NAME"));
 				currentOperation += " Name = '" + rs.getString("NAME") + "'";
 
 				insertStatement.addBatch();
@@ -377,10 +555,22 @@ public class ETL_Module {
 
 			}
 
+			insertStatement.executeBatch();
+
 		} catch (SQLException e)
 		{
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			while (e.getNextException() != null)
+			{
+				if (e.getErrorCode() == -803)
+				{
+					System.err.println("Entry is already in Database");
+				}
+				if (e.getErrorCode() != -803 && e.getErrorCode() != -99999)
+				{
+					e.printStackTrace();
+				}
+				e = e.getNextException();
+			}
 		}
 
 	}
