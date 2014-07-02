@@ -21,7 +21,7 @@ public class ETL_Module {
 	Connection	outputConnection;
 
 
-	public ETL_Module() {
+	public ETL_Module(Connection outputConnection) {
 
 		try
 		{
@@ -30,13 +30,9 @@ public class ETL_Module {
 			this.inputConnection = DriverManager.getConnection("jdbc:db2://vsisls4.informatik.uni-hamburg.de:50001/VSISP", "vsisp81", "of7GeMtY");
 			inputConnection.prepareStatement("SET SCHEMA DB2INST1").execute();
 
-			this.outputConnection = DriverManager.getConnection("jdbc:db2://vsisls4.informatik.uni-hamburg.de:50001/VSISP", "vsisp81", "of7GeMtY");
-			outputConnection.prepareStatement("SET SCHEMA VSISP81").execute();
+			this.outputConnection = outputConnection;
 
-		} catch (ClassNotFoundException e)
-		{
-			e.printStackTrace();
-		} catch (SQLException e)
+		} catch (SQLException | ClassNotFoundException e)
 		{
 			e.printStackTrace();
 		}
@@ -44,6 +40,10 @@ public class ETL_Module {
 
 
 	public void readSales() {
+
+		PreparedStatement dayStatement = null;
+		PreparedStatement yearStatement = null;
+		PreparedStatement salesStatement = null;
 
 		BufferedReader reader = null;
 		try
@@ -56,11 +56,12 @@ public class ETL_Module {
 			String[] values;
 			String previousDate = "";
 			int previousYear = 0;
-			PreparedStatement dayStatement = outputConnection.prepareStatement("INSERT INTO DAY(day, month, year) VALUES (?, ?, ?)");
-			PreparedStatement yearStatement = outputConnection.prepareStatement("INSERT INTO YEAR(year) VALUES (?)");
-			PreparedStatement salesStatement = outputConnection.prepareStatement("INSERT INTO SALES(article, shop, day, amount, revenue) VALUES (?,?,?,?,?)");
+			dayStatement = outputConnection.prepareStatement("INSERT INTO DAY(day, month, year) VALUES (?, ?, ?)");
+			yearStatement = outputConnection.prepareStatement("INSERT INTO YEAR(year) VALUES (?)");
+			salesStatement = outputConnection.prepareStatement("INSERT INTO SALES(article, shop, day, amount, revenue) VALUES (?,?,?,?,?)");
 
-			while (line != null)
+			int i = 0;
+			while (line != null && i < 50)
 			{
 				String currentOperation = "Added to Batch: ";
 				values = line.split("\\;");
@@ -93,7 +94,7 @@ public class ETL_Module {
 				previousDate = values[0];
 
 				line = reader.readLine();
-
+				i++;
 			}
 
 		} catch (Exception e)
@@ -108,8 +109,36 @@ public class ETL_Module {
 					reader.close();
 			} catch (IOException e)
 			{
-				// TODO Auto-generated catch block
 				e.printStackTrace();
+			}
+		}
+
+		executeBatchStatement(yearStatement);
+		executeBatchStatement(dayStatement);
+		executeBatchStatement(salesStatement);
+
+	}
+
+
+	private void executeBatchStatement(PreparedStatement statement) {
+
+		try
+		{
+			statement.executeBatch();
+
+		} catch (SQLException e)
+		{
+			while (e.getNextException() != null)
+			{
+				if (e.getErrorCode() == -803)
+				{
+					System.err.println("Entry is already in Database");
+				}
+				if (e.getErrorCode() != -803 && e.getErrorCode() != -99999)
+				{
+					e.printStackTrace();
+				}
+				e = e.getNextException();
 			}
 		}
 	}
